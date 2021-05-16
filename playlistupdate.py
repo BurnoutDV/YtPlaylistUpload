@@ -41,7 +41,7 @@ class playlistUpdater:
     youtube = None
     oauth_scopes = ["https://www.googleapis.com/auth/youtube.readonly", "https://www.googleapis.com/auth/youtube.force-ssl"]
 
-    def __init__(self, api_key_file=None, dev_key=None, oauth_file=None,yt_api_service_name="youtube", yt_api_ver="v3", log_level=0):
+    def __init__(self, api_key_file=None, dev_key=None, oauth_file=None,yt_api_service_name="youtube", yt_api_ver="v3"):
         if api_key_file is not None:
             if self.load_yt_conf(api_key_file):
                 self.status = True

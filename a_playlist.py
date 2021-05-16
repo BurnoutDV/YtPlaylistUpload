@@ -20,14 +20,11 @@
 #
 # @license GPL-3.0-only <https://www.gnu.org/licenses/gpl-3.0.en.html>
 
-import unittest
+from a_video import a_video
 
-from playlistupdate import playlistUpdater
-
-
-class TestUpdater(unittest.TestCase):
-    hektor = playlistUpdater()
-
-
-if __name__ == '__main__':
-    unittest.main()
+class a_playlist:
+    """
+    For some reasons i want an object that represents a single playlist, the problem is that i am quite sure someone
+    else already build a wrapper for this and everything i do is redundant but what do i know in the first place right?
+    """
+    def __init__(self):
