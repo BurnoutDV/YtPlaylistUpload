@@ -1,6 +1,6 @@
 {
   "log_level": 50,
-  "log_format: "%(asctime)s - %(msg)s",
+  "log_format": "%(asctime)s - %(msg)s",
   "log_file": "log.log",
-  "channel": "yourChannelIdHere"
+  "channel_id": "yourChannelIdHere"
 }

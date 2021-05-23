@@ -32,6 +32,7 @@ import google_auth_oauthlib.flow
 import googleapiclient.discovery
 import googleapiclient.errors
 
+log = logging.getLogger(__name__)
 
 class playlistUpdater:
     dev_key = None
@@ -55,7 +56,6 @@ class playlistUpdater:
             self.status = True
             self._connectAPI()
 
-
     @staticmethod
     def load_generic_json(filename):
         """
@@ -69,31 +69,30 @@ class playlistUpdater:
                 return json.load(json_file)
         except IOError as e:
             if e.errno == errno.ENOENT:
-                logging.error(f"While loading json file {filename} no file could be found")
+                log.error(f"While loading json file {filename} no file could be found")
             elif e.errno == errno.EACCES:
-                logging.error(f"While loading json file {filename} there was a lack of permission")
+                log.error(f"While loading json file {filename} there was a lack of permission")
             else:
-                logging.error(f"While loading json file {filename} some unknown error '{e}' turned up")
+                log.error(f"While loading json file {filename} some unknown error '{e}' turned up")
             return None
         except JSONDecodeError as e:
-            logging.error(f"Json Decode Error {e}")
+            log.error(f"Json Decode Error in {filename}: {e}")
             return None
 
     def load_yt_conf(self, config_file_path) -> bool:
         try:
-            with open(config_file_path, "r") as conf_file:
-                data = json.load(conf_file)
+            data = playlistUpdater.load_generic_json(config_file_path)
+            if data is not None:
                 self.dev_key = data['API_KEY']
                 self.yt_service = data['YOUTUBE_API_SERVICE_NAME']
                 self.yt_app_ver = data['YOUTUBE_API_VERSION']
-        except FileNotFoundError:
-            logging.error("Config file not found")
-            return False
-        except ValueError as e:  # json
-            logging.error("Config file could not be interpreted as json", e)
-            return False
+            else:
+                return False
         except KeyError as e:
-            logging.error(f"The Key {e} could not be found in the config file.")
+            log.error(f"The Key {e} could not be found in the config file.")
+            return False
+        except TypeError as e:
+            log.error(f"Type Error with Type {e}")
             return False
         return True
 
@@ -104,9 +103,9 @@ class playlistUpdater:
             self.youtube = build(self.yt_service, self.yt_app_ver, developerKey=self.dev_key)
 
         except httplib2.ServerNotFoundError:
-            logging.error("Server connection could not be opened")
+            log.error("Server connection could not be opened")
             return False
-        logging.info("successfully connected to youtube with API Key")
+        log.info("successfully connected to youtube with API Key")
         return True
 
     def _connectOAUTH2(self, secret_file):
@@ -127,7 +126,7 @@ class playlistUpdater:
 
         if max_results > 50:
             rounds = round((max_results/50)+0.5)
-            logging.info(f"More than 50 results, {rounds} rounds", logel=3)
+            log.info(f"More than 50 results, {rounds} rounds", logel=3)
             requests = 50
         else:
             requests = max_results
@@ -174,6 +173,7 @@ class playlistUpdater:
             return False
 
     def fetch_all_playlist_videos(self, playlist_id, part="snippet"):
+        #  GET https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId={PLAYLIST_ID}&maxResults=10&order=date&type=video&key={YOUR_API_KEY}
         res = self.youtube.playlistItems().list(
             part=part,
             playlistId=playlist_id,
@@ -197,6 +197,7 @@ class playlistUpdater:
         return res
 
     def fetch_all_channel_playlists(self, channel_id):
+        #  GET https://www.googleapis.com/youtube/v3/playlists?part=snippet&channelId={CHANNEL_ID}&maxResults=10&order=date&type=video&key={YOUR_API_KEY}
         if self.youtube is None:
             return False
         res = self.youtube.playlists().list(channelId=channel_id, part='contentDetails, snippet', maxResults='50').execute()
@@ -227,9 +228,9 @@ class playlistUpdater:
                     return True
             return False
         except KeyError as e:
-            logging.error(f"Surprising KeyError with key {e}")
+            log.error(f"Surprising KeyError with key {e}")
         except googleapiclient.errors.HttpError as e:
-            logging.error(f"Error with the google API: {e}")
+            log.error(f"Error with the google API: {e}")
 
     def insert_video_into_playlist(self, playlist_id, video_id):
         if self.youtube is None:
@@ -249,4 +250,4 @@ class playlistUpdater:
             ).execute()
             return playlistItem
         except googleapiclient.errors.HttpError as e:
-            logging.error(f"Error with the google API: {e}")
+            log.error(f"Error with the google API: {e}")

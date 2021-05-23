@@ -31,7 +31,7 @@ channel = "UCU3N3MrZThrI9OMBarMPu3A"
 # Default Settings for logging, might be overwritten by config file
 log_file = "ytupdater.log"
 log_level = logging.INFO
-log_format = '$(asctime)s \t %(levelname)s:%(message)s'
+log_format = '%(asctime)s \t %(levelname)s:%(message)s'
 
 
 def check_for_updates(yt_config_file, playlist_config_file):
@@ -69,10 +69,8 @@ def check_for_updates(yt_config_file, playlist_config_file):
                     polaris.add_video_to_playlist(playlist_dict[tag], video)
                 break  # for efficiency it would be wise if the sort tag is the first on youtube
 
+
 if __name__ == "__main__":
-    polaris = playlistUpdater(oauth_file="client_secrets.json")
-    # print(polaris.fetch_all_playlist_videos("UCU3N3MrZThrI9OMBarMPu3A"))
-    #check_for_updates("yt-data.json", "sorting_playlists.json")
     try:
         config = playlistUpdater.load_generic_json("config.json")
         if config:
@@ -81,22 +79,27 @@ if __name__ == "__main__":
             log_level = config.get('log_level', log_level)
             channel = config.get('channel_id', None)
     except IOError:
-        print("Couldnt open config file, falling back to default", file=sys.stderr)
+        print("Couldn't open config file, falling back to default", file=sys.stderr)
     finally:
         logging.basicConfig(filename=log_file, format=log_format, level=log_level)
+
+        # polaris = playlistUpdater(oauth_file="client_secrets.json")
+    polaris = playlistUpdater(api_key_file="yt-data.json")
+    # print(polaris.fetch_all_playlist_videos("UCU3N3MrZThrI9OMBarMPu3A"))
+    # check_for_updates("yt-data.json", "sorting_playlists.json")
 
     if channel is None:
         logging.info("No Channel ID set, trying to pry from user input")
         print("No channel id set in config file / no config file at all, channel id needed to proceed")
         channel = input()
 
-
-
     try:
         with open("testfile.json", "w") as test_file:
-        #    json.dump(polaris.fetch_all_playlist_videos("PLAFz5ZZJ21wNyeB0GVnG1IQokpa-HBGRA", "snippet"), test_file, indent=2)
-            print(f"Status of Video in Playlist", polaris.check_existence_in_playlist("PLAFz5ZZJ21wNyeB0GVnG1IQokpa-HBGRA","M2ooDDajhaohz"))
-            json.dump(polaris.insert_video_into_playlist("PLAFz5ZZJ21wNyeB0GVnG1IQokpa-HBGRA", "1rUWjfwaERc"), test_file, indent=2)
+            json.dump(polaris.fetch_all_playlist_videos("PLAFz5ZZJ21wPLXztTV3rwsOdXHCFoI9O3", "snippet, contentDetails"), test_file, indent=2)
+            # json.dump(polaris.fetch_all_channel_playlists(channel), test_file, indent=2)
+            # print(f"Status of Video in Playlist", polaris.check_existence_in_playlist("PLAFz5ZZJ21wNyeB0GVnG1IQokpa-HBGRA","M2ooDDajhaohz"))
+            #json.dump(polaris.insert_video_into_playlist("PLAFz5ZZJ21wNyeB0GVnG1IQokpa-HBGRA", "1rUWjfwaERc"), test_file, indent=2)
     except googleapiclient.errors.HttpError as e:
-        print(f"Problem with the request: {e}")
+        logging.error(f"Problem with the request: {e}")
+
 
