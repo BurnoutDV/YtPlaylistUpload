@@ -80,7 +80,7 @@ class OneVideo:
         # ! a playlist or a search there is a difference in etag cause those are different things naturally
         self.etag = json_dict.get("etag", "")
         self.carbon_copy = True
-            return True
+        return True
 
     def _generate_tag_hash(self):
         """
