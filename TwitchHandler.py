@@ -35,29 +35,95 @@ twitch_endpoint_api = "https://api.twitch.tv/helix/"
 
 class TwitchHandler:
     """
-    Twitch (v6) Rate Limit: 800 Points per Minute
+    Twitch Helix Rate Limit: 800 Points per Minute
     """
 
     def __init__(self, client_id, token):
         self.client_id = client_id
         self.token = token
         self.secret = None
+        self.headerv5 = {
+            "Accept": "application/vnd.twitchtv.v5+json",
+            "Authorization": f"OAuth {self.token}",
+            "Client-ID": self.client_id
+            }
+        self.header_helix = {
+            "Authorization": f"Bearer {self.token}",
+            "Client-ID": self.client_id
+        }
+        self.scopes = []
 
-    def api_check(self, channel):
+    def search_by_channelname(self, channel, live = False):
         """
         Simply checks if some random user is only or not, which is not the point, i just want
         the api response and this is the simplest thing on the reference page
         :return:
         """
         url = f"{twitch_endpoint_api}search/channels"
-        header = {"Client-Id": self.client_id,
-                  "Authorization": f"Bearer {self.token}"}
         payload = {"query": channel,
-                   "live_only": False}
-        r = requests.get(url, headers=header, params=payload)
-        with open("request_input.json", "w") as requester:
-            here = json.loads(r.text)
-            json.dump(here, requester, indent=4)
+                   "live_only": live}
+        r = requests.get(url, headers=self.header_helix, params=payload)
+        TwitchHandler.write_request(r.text)
+
+    def get_channel_id(self, name: str):
+        """
+        Retrieves the id of a channel by its (unique) name
+        :param name:
+        :return:
+        """
+        url = f"{twitch_endpoint_api}users"
+        payload = {"login": name}
+        logging.info(f"Requesting user info for '{name}' via {url}")
+        r = requests.get(url, headers=self.header_helix, params=payload)
+        if r.status_code != 200:
+            TwitchHandler.handle_response_error(r.text)
+        TwitchHandler.write_request(r.text)
+
+    def api_status_v5(self, verbose = False):
+        url = f"{twitch_endpoint_v5}"
+        r = requests.get(url, headers=self.headerv5)
+        if r.status_code != 200:
+            self.handle_response_error(r.text)
+            raise TypeError(f"Error - {r.status_code}")
+        response = json.loads(r.text)
+        self.scopes = response['token']['authorization']['scopes']
+        if 'token' in response:
+            if not verbose:
+                if response['token']['valid']:
+                    return response['token']['authorization']['scopes']
+                else:
+                    raise Exception("Status - token not valid")
+            else:  # Verbose
+                try:
+                    die_time = datetime.now() + timedelta(seconds=response['token']['expires_in'])
+                    report = {
+                        "valid": response['token']['valid'],
+                        "scopes": response['token']['authorization']['scopes'],
+                        "created_at": response['token']['authorization']['created_at'],
+                        "updatet_at": response['token']['authorization']['updated_at'],
+                        "client_id": response['token']['client_id'],
+                        "expires_in": die_time.isoformat()
+                    }
+                    return report
+                except KeyError as e:
+                    logging.warning(f"KeyError in Status: {e}")
+                    raise TypeError("Status - return structure is missing keys")
+        else:
+            TwitchHandler.write_request(r.text)
+            raise TypeError("Status - return structure unknown")
+
+    def api_status_validate(self):
+        url = f"https://id.twitch.tv/oauth2/validate"
+        validate_header = {"Authorization": f"OAuth {self.token}"}
+        r = requests.get(url, headers = validate_header)
+        if r.status_code != 200:
+            self.handle_response_error(r.text)
+            raise TypeError(f"Error - {r.status_code}")
+        response = json.loads(r.text)
+        if response['expires_in'] < 60*60*24: # 1 day in seconds
+            logger.warning(f"Token about to expire ({response['expires_in']} seconds left)")
+        self.scopes = response['scopes']
+        return response['scopes']
 
     def upload_video(self, file, title):
         """
@@ -65,20 +131,39 @@ class TwitchHandler:
         must use h264, aac and be in a MP4, MOV, AVI or FLV Container. The maximum of 10 Mbps Bitrate seems
         to not be very well enforced, at least my test did not ran into that. As i write this the v5 API is
         already deprecated BUT there is no equivalent in the new one also it uses another endpoint anyway.
-        _https://uploads.twitch.tv/upload/<video ID>/
+        _https://uploads.twitch.tv/upload/<video ID>/_
         Requires Channel Editor Scope //  channel_editor|channel:manage:videos
         :param file:
         :param title:
         :return:
         """
+        if not self.check_scope("channel_editor"):
+            return False
+        url = f"{twitch_endpoint_v5}videos"
+        payload = {
+                   "channel_id": "27045770",
+                   "title": title,
+                   }
+        logger.info(f"Creating new POST request to {url}")
+        r = requests.post(url, data=payload, headers=self.headerv5)
+        if r.status_code != 200:
+            TwitchHandler.handle_response_error(r.text)
+            return False
+        TwitchHandler.write_request(r.text)
 
-    @property
-    def secret(self):
-        return self._secret
-
-    @secret.setter
-    def secret(self, secret: str):
-        self._secret = secret
+    def check_scope(self, required_scope):
+        """
+        Checks if the given token is able to perform a request, if nothing was done that actually
+        checks the current token we cannot know the scope and we just default to true. This is a
+        safety net with questionable purpose i must say. But i created it, and now i feel a bit proud
+        :param required_scope: scope in which the action is to be done
+        :return: boolean value whether we are in scope or not. True if not scope given
+        """
+        if len(self.scopes) == 0:
+            return True
+        if required_scope in self.scopes:
+            return True
+        return False
 
     def obtain_token(self, scope) -> (str, datetime):
         """
@@ -94,8 +179,43 @@ class TwitchHandler:
                 "scope": scope,
             }
             r = requests.post(auth_endpoint, data=payload)
+            if r.status_code != 200:
+                msg = TwitchHandler.handle_response_error(r.text)
+                raise TypeError(f"Error - {r.status_code} - {msg}")
             quick_dict = json.loads(r.text)
             die_time = datetime.now() + timedelta(seconds=quick_dict['expires_in'])
+            """{'access_token': '1la4be0yk6l4e33gft4stn9dto0u6s', 
+                'expires_in': 5392455, 
+                'scope': ['channel_editor'], 
+                'token_type': 'bearer'}
+            """
             return quick_dict['access_token'], die_time
         else:
             raise Exception("No client secret, cannot fulfill request")
+
+    def refresh_token(self):
+        if self.secret is not None:
+            raise NotImplementedError("i have not done this yet, sorry")
+        else:
+            raise Exception("No client secret, cannot fulfill request")
+
+    @staticmethod
+    def handle_response_error(response):
+        e_m = json.loads(response)
+        logger.error(f"[{e_m['status']}]{e_m['error']} - {e_m['message']}")
+        return e_m['message']
+
+    @staticmethod
+    def write_request(request_text: str, file_path="request_input.json"):
+        with open(file_path, "w") as requester:
+            here = json.loads(request_text)
+            here['_time'] = datetime.now().isoformat()
+            json.dump(here, requester, indent=4)
+
+    @property
+    def secret(self):
+        return self._secret
+
+    @secret.setter
+    def secret(self, secret: str):
+        self._secret = secret

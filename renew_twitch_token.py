@@ -1,10 +1,12 @@
-import json
+import json, logging
 from datetime import datetime, timedelta
 
 from TwitchHandler import TwitchHandler
 
 config_file_path = "yt-data.json"
-scope = "channel_editor"
+scope = "channel_editor user_read"
+
+logging.basicConfig(filename='test_sync.log', format='[%(asctime)s] %(levelname)s:%(message)s', level=logging.INFO)
 
 """
 This is definitely the opposite of orderly but it serves its purpose, as i need channel_editor for the old
@@ -46,4 +48,4 @@ if __name__ == "__main__":
             json.dump(my_dict, target_file, indent=4)
 
     except Exception as e:
-        print(f"Something went wrong: {e}")
+        print(f"Something went wrong: [{type(e).__name__}]{e}")
