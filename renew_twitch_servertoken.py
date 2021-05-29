@@ -4,7 +4,8 @@ from datetime import datetime, timedelta
 from TwitchHandler import TwitchHandler
 
 config_file_path = "yt-data.json"
-scope = "channel_editor user_read"
+#scope = "channel_editor user_read collections_edit"
+scope = "channel:manage:videos user:read:email collections_edit channel_editor user_read"
 
 logging.basicConfig(filename='test_sync.log', format='[%(asctime)s] %(levelname)s:%(message)s', level=logging.INFO)
 
@@ -25,6 +26,7 @@ if __name__ == "__main__":
     # checks if token has enough time left
     if 'TWITCH_TOKENSCOPE' in my_dict and my_dict['TWITCH_TOKENSCOPE'] == scope:
         if 'TWITCH_TOKEN_LIFETIME' in my_dict:
+            # ? there might be an argument being made that i should check if that string is an ISO one
             token_time = datetime.fromisoformat(my_dict['TWITCH_TOKEN_LIFETIME'])
             future_now = datetime.now() + timedelta(days=7)
             if token_time > future_now:
@@ -40,7 +42,7 @@ if __name__ == "__main__":
 
     print("Loaded API Handler, commencing")
     try:
-        token, life = twitch.obtain_token(scope)
+        token, life = twitch.obtain_server_token(scope)
         my_dict['TWITCH_TOKEN_LIFETIME'] = life.isoformat()
         my_dict['TWITCH_TOKEN'] = token
         my_dict['TWITCH_TOKENSCOPE'] = scope

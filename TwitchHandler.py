@@ -42,6 +42,7 @@ class TwitchHandler:
         self.client_id = client_id
         self.token = token
         self.secret = None
+        self.default_channel = 0
         self.headerv5 = {
             "Accept": "application/vnd.twitchtv.v5+json",
             "Authorization": f"OAuth {self.token}",
@@ -120,6 +121,7 @@ class TwitchHandler:
             self.handle_response_error(r.text)
             raise TypeError(f"Error - {r.status_code}")
         response = json.loads(r.text)
+        # logger.info(json.dumps(response))
         if response['expires_in'] < 60*60*24: # 1 day in seconds
             logger.warning(f"Token about to expire ({response['expires_in']} seconds left)")
         self.scopes = response['scopes']
@@ -145,7 +147,25 @@ class TwitchHandler:
                    "title": title,
                    }
         logger.info(f"Creating new POST request to {url}")
-        r = requests.post(url, data=payload, headers=self.headerv5)
+        r = requests.post(url, payload, headers=self.headerv5)
+        if r.status_code != 200:
+            TwitchHandler.handle_response_error(r.text)
+            return False
+        TwitchHandler.write_request(r.text)
+
+    def create_collection(self, title, channel_id=0):
+        if not self.check_scope("collections_edit"):
+            return False
+        if channel_id == 0:  # * magic number, i hope no one ever has that id for any reason
+            if self.default_channel != 0:
+                channel_id = self.default_channel
+            else:
+                raise TypeError("Need some channel id (fitting to the token)")
+        if not self.check_scope("collections_edit"):
+            return False
+        url = f"{twitch_endpoint_v5}channels/{channel_id}/collections"
+        payload = {"title": title}
+        r = requests.post(url, payload, headers=self.headerv5)
         if r.status_code != 200:
             TwitchHandler.handle_response_error(r.text)
             return False
@@ -165,33 +185,77 @@ class TwitchHandler:
             return True
         return False
 
-    def obtain_token(self, scope) -> (str, datetime):
+    def obtain_server_token(self, scope) -> (str, datetime):
         """
         Small routine to obtain an access token for the given scope.
         """
-        if self.secret is not None:
-            auth_endpoint = "https://id.twitch.tv/oauth2/token"
-            print(f"Requesting token for client_id: {self.client_id}")
-            payload = {
-                "client_id": self.client_id,
-                "client_secret": self.secret,
-                "grant_type": "client_credentials",
-                "scope": scope,
-            }
-            r = requests.post(auth_endpoint, data=payload)
-            if r.status_code != 200:
-                msg = TwitchHandler.handle_response_error(r.text)
-                raise TypeError(f"Error - {r.status_code} - {msg}")
-            quick_dict = json.loads(r.text)
-            die_time = datetime.now() + timedelta(seconds=quick_dict['expires_in'])
-            """{'access_token': '1la4be0yk6l4e33gft4stn9dto0u6s', 
-                'expires_in': 5392455, 
-                'scope': ['channel_editor'], 
-                'token_type': 'bearer'}
-            """
-            return quick_dict['access_token'], die_time
-        else:
+        if self.secret is None:
             raise Exception("No client secret, cannot fulfill request")
+        auth_endpoint = "https://id.twitch.tv/oauth2/token"
+        print(f"Requesting token for client_id: {self.client_id}")
+        payload = {
+            "client_id": self.client_id,
+            "client_secret": self.secret,
+            "grant_type": "client_credentials",
+            "scope": scope,
+        }
+        r = requests.post(auth_endpoint, data=payload)
+        if r.status_code != 200:
+            msg = TwitchHandler.handle_response_error(r.text)
+            raise TypeError(f"Error - {r.status_code} - {msg}")
+        quick_dict = json.loads(r.text)
+        die_time = datetime.now() + timedelta(seconds=quick_dict['expires_in'])
+        """{'access_token': '1la4be0yk6l4e33gft4stn9dto0u6s', 
+            'expires_in': 5392455, 
+            'scope': ['channel_editor'], 
+            'token_type': 'bearer'}
+        """
+        return quick_dict['access_token'], die_time
+
+    def obtain_client_token(self, scope, response_url):
+        """"
+        GET https://id.twitch.tv/oauth2/authorize
+    ?client_id=<your client ID>
+    &redirect_uri=<your registered redirect URI>
+    &response_type=<type>
+    &scope=<space-separated list of scopes>
+    """
+        auth_endpoint = "https://id.twitch.tv/oauth2/authorize"
+        payload = {
+            "client_id": self.client_id,
+            "redirect_uri": response_url,
+            "response_type": "token",
+            "scope": scope,
+        }
+        r = requests.post(auth_endpoint, payload)
+
+    def obtain_client_token2(self, code, response_url):
+        """
+        POST https://id.twitch.tv/oauth2/token
+        ?client_id=uo6dggojyb8d6soh92zknwmi5ej1q2
+        &client_secret=nyo51xcdrerl8z9m56w9w6wg
+        &code=394a8bc98028f39660e53025de824134fb46313
+        &grant_type=authorization_code
+        &redirect_uri=http://localhost
+        :param code:
+        :param scope:
+        :return:
+        """
+        if self.secret is None:
+            raise Exception("No client secret, cannot fulfill request")
+        url = "https://id.twitch.tv/oauth2/token"
+        payload = {
+            "client_id": self.client_id,
+            "client_secret": self.secret,
+            "code": code,
+            "grant_type": "authorization_code",
+            "redirect_uri": response_url
+        }
+        r = requests.post(url, payload)
+        if r.status_code != 200:
+            TwitchHandler.handle_response_error(r.text)
+            return False
+        TwitchHandler.write_request(r.text)
 
     def refresh_token(self):
         if self.secret is not None:
@@ -201,9 +265,17 @@ class TwitchHandler:
 
     @staticmethod
     def handle_response_error(response):
-        e_m = json.loads(response)
-        logger.error(f"[{e_m['status']}]{e_m['error']} - {e_m['message']}")
-        return e_m['message']
+        if TwitchHandler.is_jsonable(response):
+            e_m = json.loads(response)
+            if 'status' in e_m and 'error' in e_m and 'message' in e_m:
+                logger.error(f"[{e_m['status']}]{e_m['error']} - {e_m['message']}")
+                return e_m['message']
+            else:
+                logger.error(json.dumps(e_m))
+                return json.dumps(e_m)
+        else:
+            logger.error(f"No Json: {response[:128]}")
+            return response[:128]
 
     @staticmethod
     def write_request(request_text: str, file_path="request_input.json"):
@@ -211,6 +283,20 @@ class TwitchHandler:
             here = json.loads(request_text)
             here['_time'] = datetime.now().isoformat()
             json.dump(here, requester, indent=4)
+
+    @staticmethod
+    def is_jsonable(x):
+        """
+        Checks if the thing can be json
+        Copied & Stolen: https://stackoverflow.com/a/53112659
+        :param x: an object
+        :return: True/False if the thing can be json
+        """
+        try:
+            json.dumps(x)
+            return True
+        except (TypeError, OverflowError):
+            return False
 
     @property
     def secret(self):

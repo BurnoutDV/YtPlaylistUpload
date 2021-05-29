@@ -45,6 +45,7 @@ class OneVideo:
         self.tag_hash = ""  # hash of all tags combined as string "tag1, tag2, tag3"
         self.etag = ""  # i have no clue for what this is good for but it exists in the files
         self.channel_id = ""  # the idea of the channel this video is belonging to
+        self.thumbnail_link = "" # Link to the highest resolution thumbnail, usually "maxres"
         self.carbon_copy = False # if its loaded from a json/api call its considered genuine till something happens
         self.published = datetime.today()  # date of publishment
 
