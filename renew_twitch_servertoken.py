@@ -4,8 +4,8 @@ from datetime import datetime, timedelta
 from TwitchHandler import TwitchHandler
 
 config_file_path = "yt-data.json"
-#scope = "channel_editor user_read collections_edit"
-scope = "channel:manage:videos user:read:email collections_edit channel_editor user_read"
+scope = "channel_editor collections_edit"
+#scope = "channel:manage:videos user:read:email collections_edit channel_editor user_read"
 
 logging.basicConfig(filename='test_sync.log', format='[%(asctime)s] %(levelname)s:%(message)s', level=logging.INFO)
 

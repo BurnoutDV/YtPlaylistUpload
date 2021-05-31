@@ -56,10 +56,29 @@ class OneVideoTest(unittest.TestCase):
         heinz.etag = "J3TC3IeuRR-HR_69iMs1wid7hrU"
         heinz.yt_id = "gfxrandomIDxfg"
         heinz.published = datetime.datetime(2021, 10, 5, 16, 3, 29, 0, pytz.UTC)
-        heinz.channelId = "UCU3N3MrZThrI9OMBarMPu3A"
+        heinz.channel_id = "UCU3N3MrZThrI9OMBarMPu3A"
         heinz.category = 20
         heinz.carbon_copy = True
-        self.assertEqual(herbert.to_yt_json("dict"), heinz.to_yt_json("dict"))
+        self.assertEqual(herbert.export("dict"), heinz.export("dict"))
+
+    def test_export_to_flat(self):
+        pass
+
+    def test_export_to_tuple(self):
+        testVideo = OneVideo()
+        big_tuple = ("yt_id", "this is the title", "this is the description", "these,are,the,tags", 43, "thisisetag",
+                     "xychannel_idsds", "2021-10-05T16:47:22", "twitch.tv/dsfsdf", "i.ytimg.com")
+        testVideo.yt_id = big_tuple[0]
+        testVideo.title = big_tuple[1]
+        testVideo.description = big_tuple[2]
+        testVideo.tags = big_tuple[3].split(',')
+        testVideo.category = big_tuple[4]
+        testVideo.etag = big_tuple[5]
+        testVideo.channel_id = big_tuple[6]
+        testVideo.published = big_tuple[7]
+        testVideo.twitch_link = big_tuple[8]
+        testVideo.yt_thumbnail_url = big_tuple[9]
+        self.assertEqual(big_tuple, testVideo.export("tuple"))
 
 
 if __name__ == '__main__':
